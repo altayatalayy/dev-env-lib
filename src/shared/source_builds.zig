@@ -9,9 +9,9 @@ const json = @import("json.zig");
 pub const Entry = struct {
     tool: []const u8,
     version: []const u8,
-    /// OS identifier, e.g. "ubuntu" or "fedora".
+    /// OS identifier, e.g. "ubuntu".
     platform: []const u8,
-    /// OS version, e.g. "24.04", "26.04", or "44".
+    /// OS version, e.g. "24.04".
     platform_version: []const u8,
     /// "x86_64" or "aarch64".
     arch: []const u8,
@@ -150,7 +150,7 @@ const testing = std.testing;
 const sample_json =
     \\{"builds":[
     \\  {"tool":"tmux","version":"3.5a","platform":"ubuntu","platform_version":"24.04","arch":"x86_64","filename":"tmux-3.5a-ubuntu-24.04-x86_64.tar.zst","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},
-    \\  {"tool":"tmux","version":"3.5a","platform":"fedora","platform_version":"44","arch":"x86_64","filename":"tmux-3.5a-fedora-44-x86_64.tar.zst","sha256":"1111111111111111111111111111111111111111111111111111111111111111"}
+    \\  {"tool":"tmux","version":"3.5a","platform":"ubuntu","platform_version":"22.04","arch":"x86_64","filename":"tmux-3.5a-ubuntu-22.04-x86_64.tar.zst","sha256":"1111111111111111111111111111111111111111111111111111111111111111"}
     \\]}
 ;
 
@@ -170,8 +170,8 @@ test "archive selection by platform key" {
     const alloc = arena_state.allocator();
 
     const manifest = try parse(alloc, sample_json);
-    const fedora = select(manifest, "tmux", "fedora", "44", "x86_64").?;
-    try testing.expectEqualStrings("tmux-3.5a-fedora-44-x86_64.tar.zst", fedora.filename);
+    const old_ubuntu = select(manifest, "tmux", "ubuntu", "22.04", "x86_64").?;
+    try testing.expectEqualStrings("tmux-3.5a-ubuntu-22.04-x86_64.tar.zst", old_ubuntu.filename);
 
     try testing.expectEqual(@as(?Entry, null), select(manifest, "tmux", "ubuntu", "26.04", "x86_64"));
     try testing.expectEqual(@as(?Entry, null), select(manifest, "git", "ubuntu", "24.04", "x86_64"));
@@ -245,8 +245,8 @@ test "merge supersedes entries sharing a key" {
     try testing.expectEqual(@as(usize, 2), merged.builds.len);
     const ubuntu = select(merged, "tmux", "ubuntu", "24.04", "x86_64").?;
     try testing.expectEqualStrings("3.6", ubuntu.version);
-    // The fedora entry is untouched.
-    try testing.expect(select(merged, "tmux", "fedora", "44", "x86_64") != null);
+    // The other entry is untouched.
+    try testing.expect(select(merged, "tmux", "ubuntu", "22.04", "x86_64") != null);
 }
 
 test "verifyFile detects mismatch and missing archive" {

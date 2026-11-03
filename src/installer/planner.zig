@@ -84,7 +84,6 @@ pub fn resolveWithDefs(
                 .version = s.version,
                 .build_dependencies = .{
                     .apt = s.build_dependencies.packages.apt,
-                    .dnf = s.build_dependencies.packages.dnf,
                 },
                 .env_exports = exports,
             },
@@ -94,7 +93,6 @@ pub fn resolveWithDefs(
                 .version = o.version,
                 .build_dependencies = .{
                     .apt = o.install_dependencies.packages.apt,
-                    .dnf = o.install_dependencies.packages.dnf,
                 },
                 .env_exports = exports,
             },
@@ -131,9 +129,6 @@ pub fn resolveWithDefs(
         .resolved_configs = resolved_configs.items,
         .system_packages = .{
             .apt = try ids.sortedUnique(alloc, packages.apt.items),
-            .dnf = try ids.sortedUnique(alloc, packages.dnf.items),
-            .brew = try ids.sortedUnique(alloc, packages.brew.items),
-            .brew_cask = try ids.sortedUnique(alloc, packages.brew_cask.items),
         },
         .stow_packages = stow_packages.items,
         .tool_actions = actions.items,
@@ -142,9 +137,6 @@ pub fn resolveWithDefs(
 
 const PackageLists = struct {
     apt: std.ArrayList([]const u8) = .empty,
-    dnf: std.ArrayList([]const u8) = .empty,
-    brew: std.ArrayList([]const u8) = .empty,
-    brew_cask: std.ArrayList([]const u8) = .empty,
 
     fn add(
         p: *PackageLists,
@@ -154,8 +146,6 @@ const PackageLists = struct {
     ) !void {
         switch (pm.kind) {
             .apt => try p.apt.appendSlice(alloc, names),
-            .dnf => try p.dnf.appendSlice(alloc, names),
-            .brew => try p.brew.appendSlice(alloc, names),
         }
     }
 
@@ -165,11 +155,7 @@ const PackageLists = struct {
         pm: platform.PackageManager,
         system: tools.System,
     ) !void {
-        if (pm.kind == .brew and system.cask) {
-            try p.brew_cask.appendSlice(alloc, system.packages);
-        } else {
-            try p.add(alloc, pm, system.packages);
-        }
+        try p.add(alloc, pm, system.packages);
     }
 
     fn addDependencies(
@@ -202,12 +188,8 @@ fn envExports(alloc: std.mem.Allocator, exports: []const tools.EnvExport) ![]con
 const testing = std.testing;
 
 const ubuntu: platform.Platform = .{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } };
-const fedora: platform.Platform = .{ .fedora = .{ .version = "44", .arch = .x86_64 } };
-const macos: platform.Platform = .{ .macos = .{ .version = "15.5", .arch = .aarch64 } };
 const test_platforms = [_]platform.Support{
     .{ .ubuntu = .{ .versions = &.{"24.04"}, .archs = &.{.x86_64} } },
-    .{ .fedora = .{ .versions = &.{"44"}, .archs = &.{.x86_64} } },
-    .{ .macos = .{ .archs = &.{ .x86_64, .aarch64 } } },
 };
 
 test "plan merges and dedupes apt packages and adds stow" {
@@ -248,8 +230,6 @@ test "plan merges and dedupes apt packages and adds stow" {
     for (expected_apt, resp.system_packages.apt) |want, got| {
         try testing.expectEqualStrings(want, got);
     }
-    try testing.expectEqual(@as(usize, 0), resp.system_packages.dnf.len);
-    try testing.expectEqual(@as(usize, 0), resp.system_packages.brew.len);
     try testing.expectEqual(@as(usize, 2), resp.selected_tools.len);
     try testing.expectEqual(@as(usize, 1), resp.stow_packages.len);
     try testing.expectEqualStrings("tmux", resp.stow_packages[0]);
@@ -260,14 +240,6 @@ test "plan rejects unsupported platform" {
     var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena_state.deinit();
     const alloc = arena_state.allocator();
-
-    const old_fedora: platform.Platform = .{ .fedora = .{ .version = "40", .arch = .x86_64 } };
-    try testing.expectError(error.UnsupportedPlatform, resolve(alloc, .{
-        .protocol = proto.version,
-        .platform = old_fedora,
-        .tools = &.{"tmux"},
-        .include_configs = true,
-    }));
 
     const old_ubuntu: platform.Platform = .{ .ubuntu = .{ .version = "22.04", .arch = .x86_64 } };
     try testing.expectError(error.UnsupportedPlatform, resolve(alloc, .{
@@ -300,11 +272,9 @@ test "plan rejects a tool unsupported on an otherwise supported platform" {
         .{
             .id = .tmux,
             .description = "",
-            .platforms = &.{
-                .{ .fedora = .{ .versions = &.{"44"}, .archs = &.{.x86_64} } },
-            },
+            .platforms = &.{},
             .methods = &.{
-                .{ .on = &.{.dnf}, .method = .{ .system = .{
+                .{ .on = &.{.apt}, .method = .{ .system = .{
                     .packages = &.{"tmux"},
                     .check_bin = "tmux",
                 } } },
@@ -314,8 +284,8 @@ test "plan rejects a tool unsupported on an otherwise supported platform" {
 
     try testing.expectError(error.UnsupportedPlatform, resolveWithDefs(alloc, defs, .{
         .protocol = proto.version,
-        .platform = fedora,
-        .tools = &.{"git"},
+        .platform = ubuntu,
+        .tools = &.{"tmux"},
         .include_configs = false,
     }));
 }
@@ -370,67 +340,6 @@ test "release plan resolves config and toolchain dependencies" {
         }
     }
     try testing.expect(found_neovim);
-}
-
-test "release plan selects dnf dependencies on fedora" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const alloc = arena_state.allocator();
-
-    const resp = try resolve(alloc, .{
-        .protocol = proto.version,
-        .platform = fedora,
-        .tools = &.{"tmux"},
-        .include_configs = true,
-    });
-
-    try testing.expectEqual(@as(usize, 0), resp.system_packages.apt.len);
-    try testing.expect(ids.contains(resp.system_packages.dnf, "libevent-devel"));
-    try testing.expect(ids.contains(resp.system_packages.dnf, "git"));
-    try testing.expect(ids.contains(resp.system_packages.dnf, "stow"));
-    try testing.expectEqualStrings("tmux-config", resp.resolved_configs[0]);
-    try testing.expectEqualStrings("tmux", resp.stow_packages[0]);
-}
-
-test "release plan on macos uses brew only, with no build dependencies" {
-    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
-    defer arena_state.deinit();
-    const alloc = arena_state.allocator();
-
-    const resp = try resolve(alloc, .{
-        .protocol = proto.version,
-        .platform = macos,
-        .tools = &.{ "alacritty", "go", "neovim", "rust" },
-        .include_configs = true,
-    });
-
-    // brew handles dependency resolution itself: every tool is a plain
-    // formula/cask and rust is not pulled in for alacritty.
-    try testing.expectEqual(@as(usize, 0), resp.system_packages.apt.len);
-    try testing.expectEqual(@as(usize, 0), resp.system_packages.dnf.len);
-    try testing.expect(ids.contains(resp.system_packages.brew, "git"));
-    try testing.expect(ids.contains(resp.system_packages.brew, "go"));
-    try testing.expect(ids.contains(resp.system_packages.brew, "neovim"));
-    try testing.expect(ids.contains(resp.system_packages.brew, "rust"));
-    try testing.expect(ids.contains(resp.system_packages.brew_cask, "alacritty"));
-    try testing.expect(!ids.contains(resp.system_packages.brew, "cmake"));
-    try testing.expect(ids.contains(resp.stow_packages, "shell"));
-    for (resp.tool_actions) |action| {
-        try testing.expectEqual(proto.ToolKind.system, action.kind);
-        try testing.expectEqual(@as(usize, 0), action.build_dependencies.apt.len);
-        if (std.mem.eql(u8, action.tool, "go")) {
-            try testing.expectEqual(@as(usize, 2), action.env_exports.len);
-            try testing.expectEqualStrings("GOPATH", action.env_exports[0].name);
-        } else if (std.mem.eql(u8, action.tool, "rust")) {
-            try testing.expectEqual(@as(usize, 3), action.env_exports.len);
-            try testing.expectEqualStrings("RUSTUP_HOME", action.env_exports[0].name);
-        } else {
-            try testing.expectEqual(@as(usize, 0), action.env_exports.len);
-        }
-    }
-
-    // zig is not selected, so brew must not include it.
-    try testing.expect(!ids.contains(resp.system_packages.brew, "zig"));
 }
 
 test "release plan exposes rust official installer on linux" {
@@ -526,27 +435,6 @@ test "release plan selects the docker method per platform" {
     const ubuntu_method = release.defs.tool(.docker).?.method(ubuntu).?;
     try testing.expectEqual(@as(usize, 1), ubuntu_method.method.official.repositories.len);
     try testing.expectEqual(@as(usize, 5), ubuntu_method.method.official.packages.len);
-
-    const on_fedora = try resolve(alloc, .{
-        .protocol = proto.version,
-        .platform = fedora,
-        .tools = &.{"docker"},
-        .include_configs = true,
-    });
-    try testing.expectEqual(proto.ToolKind.official, on_fedora.tool_actions[0].kind);
-    try testing.expect(ids.contains(on_fedora.system_packages.dnf, "dnf-plugins-core"));
-    const fedora_method = release.defs.tool(.docker).?.method(fedora).?;
-    try testing.expectEqual(@as(usize, 1), fedora_method.method.official.repositories.len);
-    try testing.expectEqual(@as(usize, 5), fedora_method.method.official.packages.len);
-
-    const on_macos = try resolve(alloc, .{
-        .protocol = proto.version,
-        .platform = macos,
-        .tools = &.{"docker"},
-        .include_configs = true,
-    });
-    try testing.expectEqual(proto.ToolKind.system, on_macos.tool_actions[0].kind);
-    try testing.expect(ids.contains(on_macos.system_packages.brew_cask, "docker"));
 }
 
 test "release plan pulls rust for alacritty only where it is built" {
@@ -564,14 +452,6 @@ test "release plan pulls rust for alacritty only where it is built" {
     try testing.expect(ids.contains(on_ubuntu.system_packages.apt, "libfontconfig1-dev"));
     try testing.expect(ids.contains(on_ubuntu.system_packages.apt, "stow"));
     try testing.expectEqualStrings("alacritty-config", on_ubuntu.resolved_configs[0]);
-
-    const on_macos = try resolve(alloc, .{
-        .protocol = proto.version,
-        .platform = macos,
-        .tools = &.{"alacritty"},
-        .include_configs = true,
-    });
-    try testing.expect(!ids.contains(on_macos.resolved_tools, "rust"));
 }
 
 test "release plan includes git source build" {

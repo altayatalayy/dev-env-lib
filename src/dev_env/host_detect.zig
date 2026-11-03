@@ -4,7 +4,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const shared = @import("shared");
 const platform = shared.platform;
-const runner = shared.runner;
 
 pub const Error = error{ UnsupportedArch, UnsupportedPlatform, MalformedOsRelease };
 
@@ -22,16 +21,6 @@ pub fn detect(alloc: std.mem.Allocator, io: std.Io) !platform.Platform {
         .linux => {
             const contents = try std.Io.Dir.cwd().readFileAlloc(io, "/etc/os-release", alloc, .limited(64 * 1024));
             return fromOsRelease(contents, arch);
-        },
-        .macos => {
-            const result = try std.process.run(alloc, io, .{
-                .argv = &.{ "sw_vers", "-productVersion" },
-            });
-            defer alloc.free(result.stdout);
-            defer alloc.free(result.stderr);
-            if (!runner.succeeded(result.term)) return error.UnsupportedPlatform;
-            const version = std.mem.trim(u8, result.stdout, " \t\r\n");
-            return .{ .macos = .{ .version = try alloc.dupe(u8, version), .arch = arch } };
         },
         else => return error.UnsupportedPlatform,
     }
@@ -69,10 +58,9 @@ pub fn fromOsRelease(contents: []const u8, arch: platform.Arch) Error!platform.P
         .version = os_release.version_id,
         .arch = arch,
     };
-    if (std.mem.eql(u8, os_release.id, "ubuntu")) return .{ .ubuntu = versioned };
-    if (std.mem.eql(u8, os_release.id, "debian")) return .{ .debian = versioned };
-    if (std.mem.eql(u8, os_release.id, "fedora")) return .{ .fedora = versioned };
-    return error.UnsupportedPlatform;
+    if (!std.mem.eql(u8, os_release.id, "ubuntu") or
+        !std.mem.eql(u8, os_release.version_id, "24.04")) return error.UnsupportedPlatform;
+    return .{ .ubuntu = versioned };
 }
 
 // --- tests ---
@@ -100,4 +88,9 @@ test fromOsRelease {
 
     const arch_linux = "ID=arch\nVERSION_ID=20260101\n";
     try std.testing.expectError(error.UnsupportedPlatform, fromOsRelease(arch_linux, .x86_64));
+}
+
+test "reject unsupported Ubuntu versions" {
+    try std.testing.expectError(error.UnsupportedPlatform, fromOsRelease("ID=ubuntu\nVERSION_ID=26.04\n", .x86_64));
+    try std.testing.expectError(error.UnsupportedPlatform, fromOsRelease("ID=fedora\nVERSION_ID=44\n", .x86_64));
 }

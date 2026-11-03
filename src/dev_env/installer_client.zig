@@ -291,8 +291,8 @@ test newestCompatible {
     const best = (try newestCompatible(&installers, test_platform)).?;
     try testing.expectEqualStrings("0.10.0", best.release);
 
-    const debian: platform.Platform = .{ .debian = .{ .version = "13", .arch = .x86_64 } };
-    try testing.expectEqual(@as(?Installer, null), try newestCompatible(&installers, debian));
+    const unsupported: platform.Platform = .{ .ubuntu = .{ .version = "22.04", .arch = .x86_64 } };
+    try testing.expectEqual(@as(?Installer, null), try newestCompatible(&installers, unsupported));
 }
 
 test "ensureCompatible rejects protocol and platform mismatches" {
@@ -300,8 +300,8 @@ test "ensureCompatible rejects protocol and platform mismatches" {
     try testing.expectError(error.UnsupportedProtocol, wrong_protocol.ensureCompatible(test_platform));
 
     const ok = testInstaller("0.1.0", proto.version);
-    const debian: platform.Platform = .{ .debian = .{ .version = "13", .arch = .x86_64 } };
-    try testing.expectError(error.UnsupportedPlatform, ok.ensureCompatible(debian));
+    const unsupported: platform.Platform = .{ .ubuntu = .{ .version = "22.04", .arch = .x86_64 } };
+    try testing.expectError(error.UnsupportedPlatform, ok.ensureCompatible(unsupported));
     try ok.ensureCompatible(test_platform);
 }
 

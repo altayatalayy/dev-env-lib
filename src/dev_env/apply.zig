@@ -126,7 +126,7 @@ fn uninstallRemovedTools(
     });
     for (response.removed) |name| std.log.info("removed {s}", .{name});
     for (response.kept_system) |name| {
-        std.log.info("kept system package for {s} (remove via apt/brew if wanted)", .{name});
+        std.log.info("kept system package for {s} (remove via apt if wanted)", .{name});
     }
 }
 

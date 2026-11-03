@@ -32,7 +32,7 @@ pub const Env = struct {
 pub const Progress = progress_mod.Progress;
 
 fn checkPlatform(p: platform.Platform) error{UnsupportedPlatform}!void {
-    if (!release.supportsPlatform(p)) {
+    if (!std.mem.eql(u8, p.fields().version, "24.04") or !release.supportsPlatform(p)) {
         return error.UnsupportedPlatform;
     }
 }
@@ -67,6 +67,7 @@ pub fn metadata(alloc: std.mem.Allocator) !proto.MetadataResponse {
 }
 
 pub fn resolve(alloc: std.mem.Allocator, progress: ?*Progress, req: proto.ResolveRequest) !proto.ResolveResponse {
+    try checkPlatform(req.platform);
     const response = try planner.resolve(alloc, req);
     if (progress) |p| {
         try p.emit(.{ .event = "graph_built", .tools = response.resolved_tools });
@@ -144,7 +145,7 @@ test metadata {
     try std.testing.expectEqualStrings(release.name, meta.release);
     try std.testing.expectEqual(release.tool_defs.len, meta.tools.len);
     try std.testing.expectEqual(countConfigs(), meta.configs.len);
-    try std.testing.expectEqual(@as(usize, 3), meta.platforms.len);
+    try std.testing.expect(meta.platforms.len > 0);
     for (meta.tools) |tool| {
         try std.testing.expect(tool.platforms.len > 0);
     }
@@ -164,10 +165,10 @@ test "unsupported platform is a hard error" {
     defer arena_state.deinit();
     const alloc = arena_state.allocator();
 
-    // debian is not declared in this release's supported platforms.
+    // Only the declared Ubuntu version is supported.
     try std.testing.expectError(error.UnsupportedPlatform, resolve(alloc, null, .{
         .protocol = proto.version,
-        .platform = .{ .debian = .{ .version = "13", .arch = .x86_64 } },
+        .platform = .{ .ubuntu = .{ .version = "22.04", .arch = .x86_64 } },
         .tools = &.{},
         .include_configs = true,
     }));

@@ -1,6 +1,6 @@
 //! Uninstall orchestration: unstow configs, call the installer recorded in
 //! installed.json to remove release-owned tools, then remove dev-env state.
-//! apt/brew packages are left installed.
+//! apt packages are left installed.
 
 const std = @import("std");
 const shared = @import("shared");
@@ -57,7 +57,7 @@ pub fn run(
     });
     for (response.removed) |name| std.log.info("removed {s}", .{name});
     for (response.kept_system) |name| {
-        std.log.info("kept system package for {s} (remove via apt/brew if wanted)", .{name});
+        std.log.info("kept system package for {s} (remove via apt if wanted)", .{name});
     }
 
     // 4. Leftover opt prefixes from older releases.

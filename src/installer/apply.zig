@@ -441,12 +441,11 @@ test "apply config command accepts empty config list" {
     try std.testing.expectEqual(@as(usize, 0), resp.applied.len);
 }
 
-test "apply installs system tools dependency-first" {
+test "apply records system tools without installing them again" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const alloc = arena_state.allocator();
     const io = std.testing.io;
-
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const home = try tmp.dir.realPathFileAlloc(io, ".", alloc);
@@ -455,23 +454,31 @@ test "apply installs system tools dependency-first" {
         .opt = try std.fs.path.join(alloc, &.{ home, "opt" }),
         .cache_dir = try std.fs.path.join(alloc, &.{ home, ".cache" }),
     });
-
     var env_map = std.process.Environ.Map.init(alloc);
     defer env_map.deinit();
     try env_map.put("PATH", "");
 
-    // brew: every tool is a system package, so apply only records them.
+    const supported = [_]platform.Support{
+        .{ .ubuntu = .{ .versions = &.{"24.04"}, .archs = &.{.x86_64} } },
+    };
+    const definitions = [_]tools.ToolDef{
+        .{ .id = .git, .description = "", .platforms = &supported, .methods = &.{
+            .{ .method = .{ .system = .{ .packages = &.{"git"}, .check_bin = "git" } } },
+        } },
+        .{ .id = .tmux, .description = "", .platforms = &supported, .methods = &.{
+            .{ .method = .{ .system = .{ .packages = &.{"tmux"}, .check_bin = "tmux" } } },
+        } },
+    };
     const resp = try apply(alloc, io, .{
         .layout = layout,
         .environ_map = &env_map,
-    }, null, @import("environment_release").defs, .{
+    }, null, .{ .tools = &definitions }, .{
         .protocol = proto.version,
-        .platform = .{ .macos = .{ .version = "15.5", .arch = .aarch64 } },
+        .platform = .{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } },
         .layout = .{ .bin = layout.bin, .opt = layout.opt, .cache_dir = layout.cache_dir },
-        .tools = &.{ "alacritty", "rust" },
-        .install = &.{ "alacritty", "rust" },
+        .tools = &.{ "git", "tmux" },
+        .install = &.{ "git", "tmux" },
     });
-
     try std.testing.expectEqual(@as(usize, 2), resp.tools.len);
     for (resp.tools) |tool| {
         try std.testing.expectEqual(proto.ToolKind.system, tool.kind);

@@ -10,16 +10,14 @@ const runner = @import("runner.zig");
 
 pub const Arch = enum { x86_64, aarch64 };
 
-pub const Family = enum { linux, macos };
+pub const Family = enum { linux };
 
 pub const PackageManager = struct {
     kind: Kind,
 
-    pub const Kind = enum { apt, dnf, brew };
+    pub const Kind = enum { apt };
 
-    pub const InstallOptions = struct {
-        cask: bool = false,
-    };
+    pub const InstallOptions = struct {};
 
     pub fn init(kind: Kind) PackageManager {
         return .{ .kind = kind };
@@ -31,11 +29,6 @@ pub const PackageManager = struct {
                 &.{ "apt-get", "update", "--quiet" }
             else
                 &.{ "sudo", "apt-get", "update", "--quiet" },
-            .dnf => if (isRoot())
-                &.{ "dnf", "makecache", "--refresh", "--assumeyes" }
-            else
-                &.{ "sudo", "dnf", "makecache", "--refresh", "--assumeyes" },
-            .brew => &.{ "brew", "update" },
         };
         try runPackageCommand(alloc, io, argv, error.PackageManagerUpdateFailed);
     }
@@ -46,31 +39,10 @@ pub const PackageManager = struct {
         io: std.Io,
         repository: Repository,
     ) !void {
+        _ = pm;
         switch (repository) {
             .apt => |repo| {
-                if (pm.kind != .apt) return error.RepositoryManagerMismatch;
                 try addAptRepository(alloc, io, repo);
-            },
-            .dnf => |repo| {
-                if (pm.kind != .dnf) return error.RepositoryManagerMismatch;
-                const prefix: []const []const u8 = if (isRoot()) &.{"dnf"} else &.{ "sudo", "dnf" };
-                const repo_arg = try std.fmt.allocPrint(alloc, "--from-repofile={s}", .{repo.url});
-                defer alloc.free(repo_arg);
-                const argv = try std.mem.concat(alloc, []const u8, &.{
-                    prefix,
-                    &.{ "config-manager", "addrepo", "--overwrite", repo_arg },
-                });
-                defer alloc.free(argv);
-                try runPackageCommand(alloc, io, argv, error.RepositorySetupFailed);
-            },
-            .brew => |repo| {
-                if (pm.kind != .brew) return error.RepositoryManagerMismatch;
-                try runPackageCommand(
-                    alloc,
-                    io,
-                    &.{ "brew", "tap", repo.tap },
-                    error.RepositorySetupFailed,
-                );
             },
         }
     }
@@ -102,14 +74,6 @@ pub const PackageManager = struct {
                 else
                     &.{ "sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "--yes" };
             },
-            .dnf => if (isRoot())
-                &.{ "dnf", "install", "--assumeyes" }
-            else
-                &.{ "sudo", "dnf", "install", "--assumeyes" },
-            .brew => if (options.cask)
-                &.{ "brew", "install", "--cask" }
-            else
-                &.{ "brew", "install" },
         };
         const argv = try std.mem.concat(alloc, []const u8, &.{ prefix, missing.items });
         defer alloc.free(argv);
@@ -137,14 +101,6 @@ pub const PackageManager = struct {
                 &.{ "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "remove", "--yes" }
             else
                 &.{ "sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "remove", "--yes" },
-            .dnf => if (isRoot())
-                &.{ "dnf", "remove", "--assumeyes" }
-            else
-                &.{ "sudo", "dnf", "remove", "--assumeyes" },
-            .brew => if (options.cask)
-                &.{ "brew", "uninstall", "--cask" }
-            else
-                &.{ "brew", "uninstall" },
         };
         const argv = try std.mem.concat(alloc, []const u8, &.{ prefix, installed.items });
         defer alloc.free(argv);
@@ -159,26 +115,20 @@ pub const PackageManager = struct {
         package: []const u8,
         options: InstallOptions,
     ) bool {
+        _ = options;
         const argv: []const []const u8 = switch (pm.kind) {
             .apt => &.{ "dpkg-query", "--show", "--showformat=${db:Status-Status}", package },
-            .dnf => &.{ "rpm", "--query", "--quiet", package },
-            .brew => if (options.cask)
-                &.{ "brew", "list", "--cask", "--versions", package }
-            else
-                &.{ "brew", "list", "--versions", package },
         };
         const result = std.process.run(alloc, io, .{ .argv = argv }) catch return false;
         defer alloc.free(result.stdout);
         defer alloc.free(result.stderr);
         if (!runner.succeeded(result.term)) return false;
-        return pm.kind != .apt or std.mem.eql(u8, result.stdout, "installed");
+        return std.mem.eql(u8, result.stdout, "installed");
     }
 };
 
 pub const Repository = union(PackageManager.Kind) {
     apt: AptRepository,
-    dnf: DnfRepository,
-    brew: BrewRepository,
 
     pub const AptRepository = struct {
         key_url: []const u8,
@@ -187,14 +137,6 @@ pub const Repository = union(PackageManager.Kind) {
         /// Shell-expanded APT source line. `${ARCH}` and
         /// `${VERSION_CODENAME}` are available.
         source_line: []const u8,
-    };
-
-    pub const DnfRepository = struct {
-        url: []const u8,
-    };
-
-    pub const BrewRepository = struct {
-        tap: []const u8,
     };
 };
 
@@ -252,9 +194,6 @@ fn addAptRepository(
 
 pub const Platform = union(enum) {
     ubuntu: Versioned,
-    debian: Versioned,
-    fedora: Versioned,
-    macos: Versioned,
 
     pub const Versioned = struct {
         version: []const u8,
@@ -269,16 +208,13 @@ pub const Platform = union(enum) {
 
     pub fn family(p: Platform) Family {
         return switch (p) {
-            .ubuntu, .debian, .fedora => .linux,
-            .macos => .macos,
+            .ubuntu => .linux,
         };
     }
 
     pub fn packageManager(p: Platform) PackageManager {
         return .init(switch (p) {
-            .ubuntu, .debian => .apt,
-            .fedora => .dnf,
-            .macos => .brew,
+            .ubuntu => .apt,
         });
     }
 
@@ -300,9 +236,6 @@ pub const Platform = union(enum) {
 /// One platform-support declaration of an installer release.
 pub const Support = union(enum) {
     ubuntu: Entry,
-    debian: Entry,
-    fedora: Entry,
-    macos: Entry,
 
     pub const Entry = struct {
         /// Supported OS versions; empty means every version.
@@ -353,78 +286,29 @@ pub fn isSupported(supports: []const Support, p: Platform) bool {
 
 test "support matching" {
     const supports = [_]Support{
-        .{ .ubuntu = .{ .versions = &.{ "24.04", "26.04" }, .archs = &.{ .x86_64, .aarch64 } } },
-        .{ .macos = .{ .archs = &.{.aarch64} } },
+        .{ .ubuntu = .{ .versions = &.{"24.04"}, .archs = &.{ .x86_64, .aarch64 } } },
     };
-
-    const ubuntu2404: Platform = .{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } };
-    const ubuntu2204: Platform = .{ .ubuntu = .{ .version = "22.04", .arch = .x86_64 } };
-    const debian: Platform = .{ .debian = .{ .version = "13", .arch = .x86_64 } };
-    const mac_arm: Platform = .{ .macos = .{ .version = "15.5", .arch = .aarch64 } };
-    const mac_intel: Platform = .{ .macos = .{ .version = "15.5", .arch = .x86_64 } };
-
-    try std.testing.expect(isSupported(&supports, ubuntu2404));
-    try std.testing.expect(!isSupported(&supports, ubuntu2204));
-    try std.testing.expect(!isSupported(&supports, debian));
-    try std.testing.expect(isSupported(&supports, mac_arm));
-    try std.testing.expect(!isSupported(&supports, mac_intel));
+    try std.testing.expect(isSupported(&supports, .{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } }));
+    try std.testing.expect(isSupported(&supports, .{ .ubuntu = .{ .version = "24.04", .arch = .aarch64 } }));
+    try std.testing.expect(!isSupported(&supports, .{ .ubuntu = .{ .version = "26.04", .arch = .x86_64 } }));
 }
 
 test "platform json round trip" {
     const alloc = std.testing.allocator;
-
     const original: Platform = .{ .ubuntu = .{ .version = "24.04", .arch = .aarch64 } };
     const encoded = try std.json.Stringify.valueAlloc(alloc, original, .{});
     defer alloc.free(encoded);
-
     const decoded = try std.json.parseFromSlice(Platform, alloc, encoded, .{});
     defer decoded.deinit();
-
     try std.testing.expect(original.eql(decoded.value));
+    try std.testing.expectEqual(Family.linux, original.family());
+    try std.testing.expectEqual(PackageManager.Kind.apt, original.packageManager().kind);
 }
 
-test "platform equality and accessors" {
-    const a: Platform = .{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } };
-    const b: Platform = .{ .debian = .{ .version = "24.04", .arch = .x86_64 } };
-
-    try std.testing.expect(!a.eql(b));
-    try std.testing.expectEqual(Family.linux, a.family());
-    try std.testing.expectEqual(PackageManager.Kind.apt, a.packageManager().kind);
-
-    const fedora: Platform = .{ .fedora = .{ .version = "44", .arch = .x86_64 } };
-    try std.testing.expectEqual(PackageManager.Kind.dnf, fedora.packageManager().kind);
-
-    const mac: Platform = .{ .macos = .{ .version = "15.5", .arch = .aarch64 } };
-    try std.testing.expectEqual(PackageManager.Kind.brew, mac.packageManager().kind);
-}
-
-test "repository must match package manager" {
-    try std.testing.expectError(
-        error.RepositoryManagerMismatch,
-        PackageManager.init(.apt).addRepository(
-            std.testing.allocator,
-            std.testing.io,
-            .{ .dnf = .{ .url = "https://example.invalid/repo" } },
-        ),
-    );
-}
-
-test "installing an empty package list is a no-op" {
-    const installed = try PackageManager.init(.apt).install(
-        std.testing.allocator,
-        std.testing.io,
-        &.{},
-        .{},
-    );
+test "installing and removing empty package lists is a no-op" {
+    const pm = PackageManager.init(.apt);
+    const installed = try pm.install(std.testing.allocator, std.testing.io, &.{}, .{});
+    const removed = try pm.remove(std.testing.allocator, std.testing.io, &.{}, .{});
     try std.testing.expectEqual(@as(usize, 0), installed.len);
-}
-
-test "removing an empty package list is a no-op" {
-    const removed = try PackageManager.init(.apt).remove(
-        std.testing.allocator,
-        std.testing.io,
-        &.{},
-        .{},
-    );
     try std.testing.expectEqual(@as(usize, 0), removed.len);
 }

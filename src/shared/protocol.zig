@@ -18,7 +18,8 @@ const std = @import("std");
 /// protocol is simply never selected.
 ///
 /// 2: dropped the unused `ApplyRequest.deactivate` field.
-pub const version: u32 = 2;
+/// 3: restrict platforms and system packages to Ubuntu and apt.
+pub const version: u32 = 3;
 
 /// Installer argv subcommands.
 pub const Command = enum {
@@ -165,7 +166,7 @@ fn writeLine(alloc: std.mem.Allocator, writer: *std.Io.Writer, message: anytype)
 pub const ToolKind = enum {
     /// Downloaded archive installed under the configured opt root.
     archive,
-    /// Provided by the system package manager (apt/brew); never versioned
+    /// Provided by the system package manager (apt); never versioned
     /// or removed by dev-env.
     system,
     /// Built from source by the release installer.
@@ -204,13 +205,9 @@ pub const ResolveRequest = struct {
 
 pub const SystemPackages = struct {
     apt: []const []const u8 = &.{},
-    dnf: []const []const u8 = &.{},
-    brew: []const []const u8 = &.{},
-    brew_cask: []const []const u8 = &.{},
 
     pub fn isEmpty(p: SystemPackages) bool {
-        return p.apt.len == 0 and p.dnf.len == 0 and
-            p.brew.len == 0 and p.brew_cask.len == 0;
+        return p.apt.len == 0;
     }
 };
 

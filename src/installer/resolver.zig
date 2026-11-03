@@ -1,7 +1,7 @@
 //! Dependency resolution.
 //!
 //! Two graphs exist: config -> config edges, and tool -> tool edges declared
-//! by method build/runtime dependencies. apt/dnf/brew packages are not graph
+//! by method build/runtime dependencies. System packages are not graph
 //! nodes. Resolution is package-manager aware because a tool's dependencies
 //! belong to the install method selected for the host.
 //!
@@ -309,12 +309,8 @@ pub fn installOrder(
 const testing = std.testing;
 const test_platforms = [_]platform.Support{
     .{ .ubuntu = .{ .versions = &.{"24.04"}, .archs = &.{.x86_64} } },
-    .{ .fedora = .{ .versions = &.{"44"}, .archs = &.{.x86_64} } },
-    .{ .macos = .{ .archs = &.{.aarch64} } },
 };
 const ubuntu: platform.Platform = .{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } };
-const fedora: platform.Platform = .{ .fedora = .{ .version = "44", .arch = .x86_64 } };
-const macos: platform.Platform = .{ .macos = .{ .version = "15.5", .arch = .aarch64 } };
 
 fn testTool(comptime id: tools.ToolId) tools.ToolDef {
     return testToolWithConfigs(id, &.{});
@@ -347,7 +343,7 @@ fn testSourceToolWithDependencies(
         .platforms = &test_platforms,
         .methods = &.{
             .{
-                .on = &.{ .apt, .dnf },
+                .on = &.{.apt},
                 .method = .{ .source = .{
                     .version = "1",
                     .url = "https://example.invalid/src.tar.gz",
@@ -359,7 +355,6 @@ fn testSourceToolWithDependencies(
                     .bin_links = &.{},
                 } },
             },
-            .{ .on = &.{.brew}, .method = .{ .system = .{ .packages = &.{@tagName(id)}, .check_bin = @tagName(id) } } },
         },
     };
 }
@@ -441,10 +436,6 @@ test "method dependencies resolve only where the method is selected" {
 
     const without_runtime = try resolve(alloc, defs, ubuntu, &.{.alacritty}, false, false);
     try testing.expectEqualSlices(tools.ToolId, &.{ .rust, .alacritty }, without_runtime.tools);
-
-    // brew installs the cask/formula: no toolchain needed.
-    const on_brew = try resolve(alloc, defs, macos, &.{.alacritty}, false, true);
-    try testing.expectEqualSlices(tools.ToolId, &.{.alacritty}, on_brew.tools);
 }
 
 test "config dependency closure includes config and its tool" {
@@ -492,7 +483,7 @@ test "resolution fails when a tool has no method for the platform" {
     const defs: Defs = .{ .tools = &apt_only };
 
     _ = try resolve(alloc, defs, ubuntu, &.{.docker}, false, true);
-    try testing.expectError(error.UnsupportedPlatform, resolve(alloc, defs, fedora, &.{.docker}, false, true));
+    try testing.expectError(error.UnsupportedPlatform, resolve(alloc, defs, .{ .ubuntu = .{ .version = "22.04", .arch = .x86_64 } }, &.{.docker}, false, true));
 }
 
 test installOrder {

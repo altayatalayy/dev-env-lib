@@ -31,6 +31,18 @@ jobs:
       - name: Build generic CLI
         run: zig build
 
+      - name: Lint shell tests
+        run: find test/e2e -name '*.sh' -print0 | xargs -0 shellcheck
+
+      - name: Run container lifecycle tests
+        run: |
+          docker build --file test/Dockerfile --tag dev-env-lib-tests .
+          docker run --rm --tmpfs /tmp:exec \
+              --volume "${GITHUB_WORKSPACE}:/work:ro" \
+              --env DEV_ENV_BIN_DIR=/work/zig-out/bin \
+              --env DEV_ENV_TEST_TARGET=ubuntu-24.04-x86_64 \
+              dev-env-lib-tests bash /work/test/e2e/fake/run.sh
+
   lean:
     runs-on: ubuntu-24.04
     steps:

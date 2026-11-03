@@ -18,8 +18,7 @@ while (changed) {
 ```
 
 `deps t` abstracts "the tools required by the install method selected for this
-host", which is why resolution is package-manager aware: the same tool has a
-different `deps` on apt/dnf than on brew.
+host".
 
 This module proves the fixed-point characterization and membership properties.
 `Termination.lean` proves the finite-universe bound and least closure. The

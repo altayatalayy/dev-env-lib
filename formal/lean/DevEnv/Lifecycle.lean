@@ -1,7 +1,7 @@
 /-!
-Migration of DevEnvApply.tla. Sets are characteristic functions over arbitrary
+Sets are characteristic functions over arbitrary
 resource names; releases are arbitrary natural numbers. There are no finite
-model-checking bounds. One name still abstracts one tool/config pair, and each
+bounds on resources. One name still abstracts one tool/config pair, and each
 installer/config/uninstall operation is atomic. See the coverage document for
 where that abstraction differs from Zig.
 -/

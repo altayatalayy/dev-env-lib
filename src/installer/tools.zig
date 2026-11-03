@@ -3,10 +3,7 @@
 //! Tool and config ids are enums because the set is fixed per release; an
 //! unknown name coming over the protocol fails to map and is rejected.
 //!
-//! Install methods are selected per package-manager domain (apt/dnf/brew):
-//! the same tool can be a source build on apt/dnf and a plain brew formula
-//! on macOS. Build and runtime dependencies belong to the selected method,
-//! while dependencies used only by a config belong to that config.
+//! Dependencies are declared by each installation method and config.
 
 const std = @import("std");
 const shared = @import("shared");
@@ -108,14 +105,10 @@ pub const Step = struct {
 /// Packages supplied by the host package manager.
 pub const PackageDependencies = struct {
     apt: []const []const u8 = &.{},
-    dnf: []const []const u8 = &.{},
-    brew: []const []const u8 = &.{},
 
     pub fn forManager(d: PackageDependencies, pm: platform.PackageManager) []const []const u8 {
         return switch (pm.kind) {
             .apt => d.apt,
-            .dnf => d.dnf,
-            .brew => d.brew,
         };
     }
 };
@@ -158,8 +151,6 @@ pub const Archive = struct {
 pub const System = struct {
     /// Package names for the package manager this method is bound to.
     packages: []const []const u8,
-    /// brew only: install the packages as casks.
-    cask: bool = false,
     /// Executable expected on PATH once installed; used by verify.
     check_bin: []const u8,
 };
@@ -220,7 +211,6 @@ pub const ConfigDef = struct {
 test "method selection by package manager" {
     const supports = [_]platform.Support{
         .{ .ubuntu = .{ .archs = &.{.x86_64} } },
-        .{ .macos = .{ .archs = &.{.x86_64} } },
     };
     const def: ToolDef = .{
         .id = .docker,
@@ -232,27 +222,16 @@ test "method selection by package manager" {
                 .install_steps = &.{},
                 .verify_bins = &.{"docker"},
             } } },
-            .{ .on = &.{.brew}, .method = .{ .system = .{
-                .packages = &.{"docker"},
-                .cask = true,
-                .check_bin = "docker",
-            } } },
         },
     };
 
     const ubuntu: platform.Platform = .{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } };
-    const macos: platform.Platform = .{ .macos = .{ .version = "15", .arch = .x86_64 } };
-    const fedora: platform.Platform = .{ .fedora = .{ .version = "44", .arch = .x86_64 } };
     try std.testing.expect(def.method(ubuntu).?.method == .official);
-    try std.testing.expect(def.method(macos).?.method == .system);
-    try std.testing.expectEqual(@as(?*const PlatformMethod, null), def.method(fedora));
 }
 
 test "empty selector matches any package manager" {
     const supports = [_]platform.Support{
         .{ .ubuntu = .{ .archs = &.{.x86_64} } },
-        .{ .fedora = .{ .archs = &.{.x86_64} } },
-        .{ .macos = .{ .archs = &.{.x86_64} } },
     };
     const def: ToolDef = .{
         .id = .go,
@@ -264,8 +243,6 @@ test "empty selector matches any package manager" {
     };
 
     try std.testing.expect(def.method(.{ .ubuntu = .{ .version = "24.04", .arch = .x86_64 } }) != null);
-    try std.testing.expect(def.method(.{ .fedora = .{ .version = "44", .arch = .x86_64 } }) != null);
-    try std.testing.expect(def.method(.{ .macos = .{ .version = "15", .arch = .x86_64 } }) != null);
 }
 
 test "tool platform support is checked before package manager selection" {
@@ -288,9 +265,6 @@ test "tool platform support is checked before package manager selection" {
     }) != null);
     try std.testing.expect(def.method(.{
         .ubuntu = .{ .version = "22.04", .arch = .x86_64 },
-    }) == null);
-    try std.testing.expect(def.method(.{
-        .debian = .{ .version = "13", .arch = .x86_64 },
     }) == null);
 }
 

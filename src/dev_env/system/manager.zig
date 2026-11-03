@@ -27,22 +27,7 @@ pub const Manager = struct {
         io: std.Io,
         packages: proto.SystemPackages,
     ) !InstallResult {
-        const installed = switch (m.package_manager.kind) {
-            .apt => try m.package_manager.install(alloc, io, packages.apt, .{}),
-            .dnf => try m.package_manager.install(alloc, io, packages.dnf, .{}),
-            .brew => blk: {
-                var all: std.ArrayList([]const u8) = .empty;
-                try all.appendSlice(
-                    alloc,
-                    try m.package_manager.install(alloc, io, packages.brew, .{}),
-                );
-                try all.appendSlice(
-                    alloc,
-                    try m.package_manager.install(alloc, io, packages.brew_cask, .{ .cask = true }),
-                );
-                break :blk all.items;
-            },
-        };
+        const installed = try m.package_manager.install(alloc, io, packages.apt, .{});
         return .{ .installed = installed };
     }
 };
@@ -50,14 +35,10 @@ pub const Manager = struct {
 // --- tests ---
 
 test "manager selects its own package lists" {
-    // Empty lists are a no-op for every manager; this exercises dispatch
+    // Empty lists are a no-op for apt; this exercises dispatch
     // without touching the host system.
     const packages: proto.SystemPackages = .{};
     const io = std.testing.io;
     const apt_result = try Manager.init(.init(.apt)).ensureInstalled(std.testing.allocator, io, packages);
-    const dnf_result = try Manager.init(.init(.dnf)).ensureInstalled(std.testing.allocator, io, packages);
-    const brew_result = try Manager.init(.init(.brew)).ensureInstalled(std.testing.allocator, io, packages);
     try std.testing.expect(!apt_result.changed());
-    try std.testing.expect(!dnf_result.changed());
-    try std.testing.expect(!brew_result.changed());
 }
