@@ -1,0 +1,23 @@
+.{
+    .name = .dev_env_lib,
+    .version = "0.1.1",
+    .fingerprint = 0xeb39257a89e2a4b2,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        .zig_cli = .{
+            .url = "git+https://github.com/altayatalayy/zig-cli.git#2ce665a51427e6434f18e71ba504d7bd106b8e63",
+            .hash = "zig_cli-0.1.0-ezGa-0juAADZjnzlbPPmaHDwks9XUgB-glRDi3sdMczE",
+        },
+        .zig_graph = .{
+            .url = "git+https://github.com/altayatalayy/zig-graph.git#ea90c2ee4e013ab5ee40631ae77687a4907434c0",
+            .hash = "zig_graph-0.1.0-ehSuii_zAABGO-ZMtrm4MNPBWb1N-SQ5zjpy2eGgnKg2",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "README.md",
+        "src",
+        "test",
+    },
+}

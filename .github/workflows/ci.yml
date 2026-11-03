@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zig:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.17.0
+
+      - name: Check formatting
+        run: zig fmt --check src test build.zig
+
+      - name: Run unit tests
+        run: zig build test --summary all
+
+      - name: Build generic CLI
+        run: zig build
+
+  lean:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install elan
+        run: |
+          curl --fail --location --show-error --silent \
+              https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+              | sh -s -- -y --default-toolchain none
+
+      - name: Build proofs and audit axioms
+        run: formal/run.sh
