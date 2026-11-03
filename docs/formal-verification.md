@@ -5,8 +5,7 @@ All formal verification uses **Lean 4**, pinned in
 models cover pure algorithms and an abstract apply/uninstall lifecycle; they
 are hand-written specifications, not mechanically verified Zig code.
 
-The migration from TLA+ was completed on 2026-10-13. Lifecycle safety is now
-proved by induction for arbitrary resource sets and finite histories, replacing
+Lifecycle safety is proved by induction for arbitrary resource sets and finite histories, replacing
 bounded enumeration. Known failure traces are positive theorems demonstrating
 violations, so the suite passes only when those witnesses remain valid.
 **The current Zig receipt protocol still has D2/A1.** Proving the proposed
@@ -19,8 +18,7 @@ formal/run.sh          # build every imported module and audit its axioms
 ```
 
 Install Lean through `elan`; the runner uses `lake` on PATH or sources
-`$HOME/.elan/env`. The workspace selects Lean 4.32.2. Java, TLC and model
-checker downloads are no longer required. CI runs the same command.
+`$HOME/.elan/env`. The workspace selects Lean 4.32.2. CI runs the same command.
 
 For interactive proof development:
 
@@ -52,7 +50,7 @@ model, embedded Zig tests and fake-installer regressions. The resulting work:
 2. Prove successful completion and progress under explicit fair scheduling.
 3. Close the resolver termination gap, include Stow removals in the diff, and
    formalize the previously fixed skip-link behavior.
-4. Audit all formal declarations; remove TLA+ code and generated artifacts.
+4. Audit all formal declarations and generated artifacts.
 5. Review the models against source again, run validation, and document the
    implementation obligations and remaining verification priorities.
 
